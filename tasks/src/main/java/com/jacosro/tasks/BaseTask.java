@@ -3,6 +3,7 @@ package com.jacosro.tasks;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.annotation.CallSuper;
+import android.support.annotation.NonNull;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -19,7 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * Example:
  *
- *      Task<Integer, String> task = new SynchronousTask<Integer, String>() {
+ *      Task<Integer, String> task = new BaseTask<Integer, String>() {
  *          @Override
  *          protected void onExecution(ExecutionCallback callback) {
  *              boolean success = // whatever
@@ -30,14 +31,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  *                  callback.finishTaskWithError("Error executing task");
  *              }
  *          }
- *      }.addOnResultListener(new ObservableTask.Listener<Integer>() {
+ *      }.addOnResultListener(new OnResultListener<Integer>() {
  *          @Override
- *          public void onTaskFinished(Integer t) {
+ *          public void onResult(Integer t) {
  *              Log.d(TAG, "Result of task: " + t);
  *          }
- *      }.addOnErrorListener(new ObservableTask.Listener<String>() {
+ *      }.addOnErrorListener(new OnErrorListener<String>() {
  *          @Override
- *          public void onTaskFinished(String t) {
+ *          public void onError(String t) {
  *              Log.e(TAG, "Error executing task: " + t);
  *          }
  *      };
@@ -55,8 +56,8 @@ public abstract class BaseTask<R, E> implements Task<R, E> {
     protected static final int CANCELLED = 2;
     protected static final int FINISHED = 3;
 
-    protected R result;
-    protected E error;
+    private R result;
+    private E error;
     private Queue<OnResultListener<R>> onResultListeners;
     private Queue<OnErrorListener<E>> onErrorListeners;
     private AtomicInteger state;
@@ -91,6 +92,7 @@ public abstract class BaseTask<R, E> implements Task<R, E> {
         this.handler = new Handler(Looper.getMainLooper());
     }
 
+    @NonNull
     public BaseTask<R, E> addOnResultListener(OnResultListener<R> onResult) {
         if (onResult != null)
             this.onResultListeners.add(onResult);
@@ -98,6 +100,7 @@ public abstract class BaseTask<R, E> implements Task<R, E> {
         return this;
     }
 
+    @NonNull
     public BaseTask<R, E> addOnErrorListener(OnErrorListener<E> onFail) {
         if (onFail != null)
             this.onErrorListeners.add(onFail);
@@ -114,6 +117,7 @@ public abstract class BaseTask<R, E> implements Task<R, E> {
         setState(CANCELLED);
     }
 
+    @NonNull
     public ObservableTask<R, E> execute() {
         checkState();
 
@@ -149,7 +153,7 @@ public abstract class BaseTask<R, E> implements Task<R, E> {
         setState(RUNNING);
     }
 
-    protected abstract void onExecution(ExecutionCallback callback);
+    protected abstract void onExecution(@NonNull ExecutionCallback callback);
 
     @CallSuper
     /* Call super before overriding */

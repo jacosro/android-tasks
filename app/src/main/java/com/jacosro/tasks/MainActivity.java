@@ -1,5 +1,6 @@
 package com.jacosro.tasks;
 
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -19,7 +20,7 @@ public class MainActivity extends AppCompatActivity {
 
         Task<Long, Void> task1 = new BaseTask<Long, Void>() {
             @Override
-            protected void onExecution(ExecutionCallback callback) {
+            protected void onExecution(@NonNull ExecutionCallback callback) {
                 log("I'm working on thread: " + Thread.currentThread().getName());
                 long sum = makeSum();
                 callback.finishTaskWithResult(sum);
@@ -43,7 +44,7 @@ public class MainActivity extends AppCompatActivity {
 
         Task<Long, Void> task2 = new BaseTask<Long, Void>() {
             @Override
-            protected void onExecution(ExecutionCallback callback) {
+            protected void onExecution(@NonNull ExecutionCallback callback) {
                 log("I'm working on thread: " + Thread.currentThread().getName());
                 callback.finishTaskWithResult(makeSum());
             }
