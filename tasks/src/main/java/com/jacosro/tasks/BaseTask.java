@@ -7,16 +7,17 @@ import android.support.annotation.NonNull;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class represents a base task, that is specified in Asynchronous or Synchronous.
  * In order to create a new Task class, it should extend one of these classes, instead of this one
  *
- * A Task is an ObservableTask that can be executed with the execute() method
+ * A Task is an Task that can be executed with the execute() method
  *
  * Example:
  *
@@ -51,10 +52,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public abstract class BaseTask<R, E> implements Task<R, E> {
 
-    protected static final int INIT = 0;
     protected static final int RUNNING = 1;
     protected static final int CANCELLED = 2;
     protected static final int FINISHED = 3;
+
+    private final ExecutionCallback THE_CALLBACK = new ExecutionCallback();
 
     private R result;
     private E error;
@@ -65,45 +67,48 @@ public abstract class BaseTask<R, E> implements Task<R, E> {
     private ExecutorService executorService;
     private Handler handler;
 
-    protected class ExecutionCallback {
-
-        public void finishTaskWithResult(R r) {
-            BaseTask.this.result = r;
-            onFinish(false);
-        }
-
-        public void finishTaskWithError(E e) {
-            BaseTask.this.error = e;
-            cancel();
-            onFinish(true);
-        }
+    protected BaseTask(Executor executor) {
+        initialize(executor);
     }
 
     protected BaseTask() {
-        this(Executors.newSingleThreadExecutor());
+        initialize(TaskExecutors.BACKGROUND_THREAD_EXECUTOR);
         this.executorService = (ExecutorService) this.executor;
     }
 
-    protected BaseTask(Executor executor) {
+    private void initialize(Executor executor) {
         this.onResultListeners = new ArrayDeque<>(1);
         this.onErrorListeners = new ArrayDeque<>(1);
-        this.state = new AtomicInteger(INIT);
-        this.executor = executor;
         this.handler = new Handler(Looper.getMainLooper());
+        this.executor = executor;
+        this.state = new AtomicInteger(RUNNING);
     }
 
     @NonNull
-    public BaseTask<R, E> addOnResultListener(OnResultListener<R> onResult) {
-        if (onResult != null)
-            this.onResultListeners.add(onResult);
+    public Task<R, E> addOnResultListener(OnResultListener<R> onResultListener) {
+        if (onResultListener != null)
+            this.onResultListeners.add(onResultListener);
 
         return this;
     }
 
     @NonNull
-    public BaseTask<R, E> addOnErrorListener(OnErrorListener<E> onFail) {
-        if (onFail != null)
-            this.onErrorListeners.add(onFail);
+    public Task<R, E> addOnErrorListener(OnErrorListener<E> onErrorListener) {
+        if (onErrorListener != null)
+            this.onErrorListeners.add(onErrorListener);
+
+        return this;
+    }
+
+    @Override
+    public Task<R, E> setTimeout(@NonNull TimeoutCallback timeoutCallback) {
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                BaseTask.this.cancel();
+                timeoutCallback.onTimeout();
+            }
+        }, timeoutCallback.getTimeoutInMillis());
 
         return this;
     }
@@ -117,29 +122,16 @@ public abstract class BaseTask<R, E> implements Task<R, E> {
         setState(CANCELLED);
     }
 
-    @NonNull
-    public ObservableTask<R, E> execute() {
-        checkState();
-
+    @Override
+    public void execute() {
         onPreExecute();
 
         executor.execute(new Runnable() {
             @Override
             public void run() {
-                onExecution(new ExecutionCallback());
+                onExecution(THE_CALLBACK);
             }
         });
-
-        return this;
-    }
-
-    protected void checkState() {
-        if (isRunning())
-            throw new IllegalStateException("Task is already running!");
-
-        if (isComplete())
-            throw new IllegalStateException("Task has already finished!");
-
     }
 
     @CallSuper
@@ -159,13 +151,13 @@ public abstract class BaseTask<R, E> implements Task<R, E> {
     /* Call super before overriding */
     protected void onFinish(boolean withError) {
         if (isComplete())
-            return; // Task has already finished, ignore future results
+            return; // Task has already finished, ignore future results or errors
 
         if (!isCancelled()) {
             setState(FINISHED);
         }
 
-        if (withError) {
+        if (withError || isCancelled()) {
             handler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -210,11 +202,28 @@ public abstract class BaseTask<R, E> implements Task<R, E> {
         return state.get() == CANCELLED;
     }
 
+    public boolean isSuccessful() {
+        return state.get() == FINISHED;
+    }
+
     public boolean isComplete() {
-        return state.get() == CANCELLED || state.get() == FINISHED;
+        return isCancelled() || isSuccessful();
     }
 
     protected void setState(int state) {
         this.state.set(state);
+    }
+
+    protected class ExecutionCallback {
+
+        public void finishTaskWithResult(R result) {
+            BaseTask.this.result = result;
+            onFinish(false);
+        }
+        public void finishTaskWithError(E error) {
+            BaseTask.this.error = error;
+            cancel();
+            onFinish(true);
+        }
     }
 }

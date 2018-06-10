@@ -1,15 +1,36 @@
 package com.jacosro.tasks;
 
-/**
- * A Task is an ObservableTask that can be executed with the execute() method
- *
- * @param <R> The result of the task
- * @param <E> The error of the task
- */
-public interface Task<R, E> extends ObservableTask<R, E> {
+import android.support.annotation.NonNull;
+
+public interface Task<R, E> {
 
     /**
-     * @return This task as an ObservableTask
+     * Adds a listener to the task that gets notified when it finishes successfully
+     *
+     * @param onResultListener The result listener
+     * @return An Task
      */
-    ObservableTask<R, E> execute();
+    @NonNull
+    Task<R, E> addOnResultListener(OnResultListener<R> onResultListener);
+
+    /**
+     * Adds a listener to the task that gets notified if the task is cancelled
+     *
+     * @param onErrorListener The error listener
+     * @return An Task
+     */
+    @NonNull
+    Task<R, E> addOnErrorListener(OnErrorListener<E> onErrorListener);
+
+
+    /**
+     * Sets up a timeout for the task
+     * @param timeoutCallback the code that will be executed when the callback gets triggered
+     */
+    Task<R, E> setTimeout(@NonNull TimeoutCallback timeoutCallback);
+
+    /**
+     * Executes the task
+     */
+    void execute();
 }

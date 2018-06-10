@@ -5,70 +5,36 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 
-import java.util.concurrent.TimeUnit;
+import com.google.android.gms.tasks.TaskExecutors;
+
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final String TAG = "MainActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        log("Starting tasks");
+    }
 
-        final long t0 = System.nanoTime();
+    @Override
+    public void onStart() {
+        super.onStart();
 
-        Task<Long, Void> task1 = new BaseTask<Long, Void>() {
-            @Override
-            protected void onExecution(@NonNull ExecutionCallback callback) {
-                log("I'm working on thread: " + Thread.currentThread().getName());
-                long sum = makeSum();
-                callback.finishTaskWithResult(sum);
-            }
-        }.addOnResultListener(new OnResultListener<Long>() {
-            @Override
-            public void onResult(Long aLong) {
-                log("I'm on thread: " + Thread.currentThread().getName());
-                log("Task 1 took " + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0) + " ms");
-            }
-        }).addOnErrorListener(new OnErrorListener<Void>() {
-            @Override
-            public void onError(Void aVoid) {
-                log("Error task 1");
-            }
-        });
+        Task<String, Void> task = Tasks.forResult("My result");
 
-        task1.execute();
-
-        final long tt0 = System.nanoTime();
-
-        Task<Long, Void> task2 = new BaseTask<Long, Void>() {
-            @Override
-            protected void onExecution(@NonNull ExecutionCallback callback) {
-                log("I'm working on thread: " + Thread.currentThread().getName());
-                callback.finishTaskWithResult(makeSum());
-            }
-        }.addOnResultListener(new OnResultListener<Long>() {
-            @Override
-            public void onResult(Long aLong) {
-                log("I'm on thread: " + Thread.currentThread().getName());
-                log("Task 2 took " + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - tt0) + " ms");
-            }
-        }).addOnErrorListener(new OnErrorListener<Void>() {
-            @Override
-            public void onError(Void aVoid) {
-                log("Error task 2");
-            }
-        });
-
-
-        task2.execute();
-
+        task.addOnResultListener(this::log);
+        task.addOnErrorListener(ignore -> log("Cancelled task"));
     }
 
     private void log(String message) {
-        String tag = "Tasks"; // Thread.currentThread().getName();
-        Log.d(tag, message);
+        if (message == null) {
+            message = "No message";
+        }
+
+        Log.d(TAG, message);
     }
 
     private long makeSum() {
@@ -77,5 +43,14 @@ public class MainActivity extends AppCompatActivity {
             sum += i;
         }
         return sum;
+    }
+
+    private Task<Integer, String> makeSumTask() {
+        return new BaseTask<Integer, String>() {
+            @Override
+            protected void onExecution(@NonNull ExecutionCallback callback) {
+
+            }
+        };
     }
 }
