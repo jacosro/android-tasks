@@ -26,7 +26,7 @@ public class MainActivity extends AppCompatActivity {
         super.onStart();
 
           makeSumTask()
-            .addOnResultListener(result -> log("Task result: " + String.valueOf(result)))
+            .addOnResultListener(result -> log("ITask result: " + String.valueOf(result)))
             .addOnErrorListener(ignore -> log("Cancelled task"))
             .setTimeout(new TimeoutCallback(TimeUnit.MILLISECONDS, 2000) {
                 @Override
@@ -36,6 +36,7 @@ public class MainActivity extends AppCompatActivity {
             });
 
         makeSumTask().addOnResultListener(result -> toast(String.valueOf(result)));
+
     }
 
     private void log(String message) {
@@ -61,13 +62,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Task<Long, String> makeSumTask() {
-        return TaskFactory.newTask(callback -> callback.withResult(makeSum()));
+        return Task.newTask(new TaskExecution<Long, String>() {
+            @Override
+            public void onExecution(@NonNull TaskFinisher<Long, String> finish) {
+                finish.withResult(makeSum());
+            }
+        });
     }
 
     private void leak() {
-        new Thread(() -> {
-            while(true) {
-                SystemClock.sleep(1000);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while(true) {
+                    SystemClock.sleep(1000);
+                }
             }
         }).start();
     }

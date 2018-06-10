@@ -7,7 +7,7 @@ import android.support.annotation.NonNull;
  * This class is a handler for the code that will be executed
  *
  * To finish the execution of the task, the TaskFinisher must be called. It is just a callback
- * who executes the onFinish method of the Task
+ * who executes the onFinish method of the ITask
  *
  * @param <R> The result of the execution
  * @param <E> The possible error of the execution
