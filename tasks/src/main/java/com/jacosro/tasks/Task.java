@@ -28,9 +28,4 @@ public interface Task<R, E> {
      * @param timeoutCallback the code that will be executed when the callback gets triggered
      */
     Task<R, E> setTimeout(@NonNull TimeoutCallback timeoutCallback);
-
-    /**
-     * Executes the task
-     */
-    void execute();
 }

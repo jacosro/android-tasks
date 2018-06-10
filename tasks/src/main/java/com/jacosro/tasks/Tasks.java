@@ -1,32 +1,56 @@
 package com.jacosro.tasks;
 
-import android.os.Handler;
-import android.os.Looper;
-import android.support.annotation.NonNull;
-
-import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 import static com.jacosro.tasks.TaskExecutors.MAIN_THREAD_EXECUTOR;
 
+/**
+ *  A class for Task helper methods
+ */
 public class Tasks {
 
+    /**
+     * Creates a simple task that returns the given result
+     * @param result The result
+     * @param <R> The result type
+     * @param <E> The error type (N/A in this case)
+     * @return The task
+     */
     public static <R, E> Task<R, E> forResult(final R result) {
-        return new BaseTask<R, E>(MAIN_THREAD_EXECUTOR) {
-            @Override
-            protected void onExecution(@NonNull ExecutionCallback callback) {
-                callback.finishTaskWithResult(result);
-            }
-        };
+        return createNewTask(callback -> callback.withResult(result), MAIN_THREAD_EXECUTOR);
     }
 
+    /**
+     * Creates a simple task that returns the given error
+     * @param error The error
+     * @param <R> The result type (N/A in this case)
+     * @param <E> The error type
+     * @return The task
+     */
     public static <R, E> Task<R, E> forError(final E error) {
-        return new BaseTask<R, E>(MAIN_THREAD_EXECUTOR) {
-            @Override
-            protected void onExecution(@NonNull ExecutionCallback callback) {
-                callback.finishTaskWithError(error);
-            }
-        };
+        return createNewTask(callback -> callback.withError(error), MAIN_THREAD_EXECUTOR);
+    }
+
+    /**
+     * Creates a new task that will execute the code inside TaskExecution
+     * @param taskExecution The code that will be executed
+     * @param <R> The result type
+     * @param <E> The error type
+     * @return A Task that will execute the code
+     */
+    public static <R, E> Task<R, E> createNewTask(TaskExecution<R, E> taskExecution) {
+        return new BaseTask<>(taskExecution);
+    }
+
+    /**
+     * Creates a new task that will execute the code inside TaskExecution
+     * @param taskExecution The code that will be executed
+     * @param executor The executor who will execute the code
+     * @param <R> The result type
+     * @param <E> The error type
+     * @return A Task that will execute the code
+     */
+    public static <R, E> Task<R, E> createNewTask(TaskExecution<R, E> taskExecution, Executor executor) {
+        return new BaseTask<>(taskExecution, executor);
     }
 }

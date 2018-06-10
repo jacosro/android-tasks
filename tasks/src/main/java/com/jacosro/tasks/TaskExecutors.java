@@ -19,5 +19,7 @@ public class TaskExecutors {
         }
     };
 
-    public static final Executor BACKGROUND_THREAD_EXECUTOR = Executors.newSingleThreadExecutor();
+    public static Executor defaultBackgroundExecutor() {
+        return Executors.newSingleThreadExecutor();
+    }
 }

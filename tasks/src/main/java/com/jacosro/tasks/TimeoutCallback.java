@@ -4,6 +4,15 @@ import java.util.concurrent.TimeUnit;
 
 public abstract class TimeoutCallback {
 
+    public static TimeoutCallback emptyCallback(TimeUnit timeUnit, long time) {
+        return new TimeoutCallback(timeUnit, time) {
+            @Override
+            public void onTimeout() {
+
+            }
+        };
+    }
+
     private TimeUnit timeUnit;
     private long time;
 
