@@ -7,75 +7,58 @@ import android.util.Log;
 
 import java.util.concurrent.TimeUnit;
 
+
 public class MainActivity extends AppCompatActivity {
+
+    private static final String TAG = "MainActivity";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        log("Starting tasks");
+    }
 
-        final long t0 = System.nanoTime();
+    @Override
+    public void onStart() {
+        super.onStart();
 
-        Task<Long, Void> task1 = new BaseTask<Long, Void>() {
-            @Override
-            protected void onExecution(@NonNull ExecutionCallback callback) {
-                log("I'm working on thread: " + Thread.currentThread().getName());
-                long sum = makeSum();
-                callback.finishTaskWithResult(sum);
-            }
-        }.addOnResultListener(new OnResultListener<Long>() {
-            @Override
-            public void onResult(Long aLong) {
-                log("I'm on thread: " + Thread.currentThread().getName());
-                log("Task 1 took " + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0) + " ms");
-            }
-        }).addOnErrorListener(new OnErrorListener<Void>() {
-            @Override
-            public void onError(Void aVoid) {
-                log("Error task 1");
-            }
+        Task<Integer, String> task = Tasks.createNewTask(finishTask -> {
+
         });
 
-        task1.execute();
+        makeSumTask()
+            .addOnResultListener(result -> log("Task result: " + String.valueOf(result)))
+            .addOnErrorListener(ignore -> log("Cancelled task"))
+            .setTimeout(new TimeoutCallback(TimeUnit.MILLISECONDS, 500) {
+                @Override
+                public void onTimeout() {
+                    log("Timeout!!!");
+                }
+            });
 
-        final long tt0 = System.nanoTime();
-
-        Task<Long, Void> task2 = new BaseTask<Long, Void>() {
-            @Override
-            protected void onExecution(@NonNull ExecutionCallback callback) {
-                log("I'm working on thread: " + Thread.currentThread().getName());
-                callback.finishTaskWithResult(makeSum());
-            }
-        }.addOnResultListener(new OnResultListener<Long>() {
-            @Override
-            public void onResult(Long aLong) {
-                log("I'm on thread: " + Thread.currentThread().getName());
-                log("Task 2 took " + TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - tt0) + " ms");
-            }
-        }).addOnErrorListener(new OnErrorListener<Void>() {
-            @Override
-            public void onError(Void aVoid) {
-                log("Error task 2");
-            }
-        });
-
-
-        task2.execute();
-
+        makeSumTask();
     }
 
     private void log(String message) {
-        String tag = "Tasks"; // Thread.currentThread().getName();
-        Log.d(tag, message);
+        Log.d(TAG, message);
     }
 
     private long makeSum() {
         long sum = 0;
-        for (long i = 0; i < Math.sqrt(Math.sqrt(Long.MAX_VALUE)); i++) {
+        for (long i = 0; i < Math.sqrt(Long.MAX_VALUE); i++) {
             sum += i;
         }
+/*        try {
+            Thread.sleep(4000);
+        } catch (InterruptedException e) {
+            return 0;
+        }*/
+
         return sum;
+    }
+
+    private Task<Long, String> makeSumTask() {
+        return Tasks.createNewTask(callback -> callback.withError("I don't want to make the sum now"));
     }
 }

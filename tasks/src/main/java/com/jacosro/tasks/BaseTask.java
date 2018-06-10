@@ -7,28 +7,27 @@ import android.support.annotation.NonNull;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * This class represents a base task, that is specified in Asynchronous or Synchronous.
- * In order to create a new Task class, it should extend one of these classes, instead of this one
+ * This class represents a base task.
+ * In order to create a new Task class, it should extend this one
  *
- * A Task is an ObservableTask that can be executed with the execute() method
  *
  * Example:
  *
- *      Task<Integer, String> task = new BaseTask<Integer, String>() {
+ *      Task<Integer, String> task = Tasks.createNewTask(new TaskExecution<Integer, String>() {
  *          @Override
- *          protected void onExecution(ExecutionCallback callback) {
+ *          public void executeOnTask(@NonNull TaskFinisher<Integer, String> finishTask) {
  *              boolean success = // whatever
  *
  *              if (success) {
- *                  callback.finishTaskWithResult(2 + 2);
+ *                  finishTask.withResult(2 + 2);
  *              } else {
- *                  callback.finishTaskWithError("Error executing task");
+ *                  finishTask.withError("Error executing task");
  *              }
  *          }
  *      }.addOnResultListener(new OnResultListener<Integer>() {
@@ -43,178 +42,242 @@ import java.util.concurrent.atomic.AtomicInteger;
  *          }
  *      };
  *
- *      task.execute();
  *
- *
- * @param <R> The result of the task
- * @param <E> The error in case the task is cancelled
+ * @param <R> The mResult of the task
+ * @param <E> The mError in case the task is cancelled
  */
-public abstract class BaseTask<R, E> implements Task<R, E> {
+public class BaseTask<R, E> implements Task<R, E> {
 
     protected static final int INIT = 0;
     protected static final int RUNNING = 1;
-    protected static final int CANCELLED = 2;
-    protected static final int FINISHED = 3;
+    protected static final int SUCCESS = 2;
+    protected static final int TIMEOUT = 3;
+    protected static final int CANCELLED = 4;
+    protected static final int DONE = 10;
 
-    private R result;
-    private E error;
-    private Queue<OnResultListener<R>> onResultListeners;
-    private Queue<OnErrorListener<E>> onErrorListeners;
-    private AtomicInteger state;
-    private Executor executor;
-    private ExecutorService executorService;
-    private Handler handler;
+    // Task data
+    private R mResult;
+    private E mError;
+    private Queue<OnResultListener<R>> mOnResultListeners;
+    private Queue<OnErrorListener<E>> mOnErrorListeners;
 
-    protected class ExecutionCallback {
+    // Task state
+    private int mState;
+    private final Object stateLock = new Object();
 
-        public void finishTaskWithResult(R r) {
-            BaseTask.this.result = r;
-            onFinish(false);
+    // Handlers
+    private TaskExecution<R, E> mTaskExecution;
+    private Executor mExecutor;
+    private ExecutorService mExecutorService;
+    private Handler mHandler;
+
+    // Timeout
+    private Timer mTimeoutTimer;
+    private TimeoutCallback mTimeoutCallback;
+
+    private final TaskExecution.TaskFinisher<R, E> THE_CALLBACK = new TaskExecution.TaskFinisher<R, E>() {
+        @Override
+        public void withResult(R result) {
+            BaseTask.this.mResult = result;
+            setState(SUCCESS);
+            onFinish();
         }
 
-        public void finishTaskWithError(E e) {
-            BaseTask.this.error = e;
-            cancel();
-            onFinish(true);
+        @Override
+        public void withError(E error) {
+            BaseTask.this.mError = error;
+            setState(CANCELLED);
+            onFinish();
         }
+    };
+
+
+    BaseTask(TaskExecution<R, E> task, Executor executor) {
+        initialize(task, executor);
+
+        execute();
     }
 
-    protected BaseTask() {
-        this(Executors.newSingleThreadExecutor());
-        this.executorService = (ExecutorService) this.executor;
+    BaseTask(TaskExecution<R, E> task) {
+        initialize(task, TaskExecutors.defaultBackgroundExecutor());
+        this.mExecutorService = (ExecutorService) this.mExecutor;
+
+        execute();
     }
 
-    protected BaseTask(Executor executor) {
-        this.onResultListeners = new ArrayDeque<>(1);
-        this.onErrorListeners = new ArrayDeque<>(1);
-        this.state = new AtomicInteger(INIT);
-        this.executor = executor;
-        this.handler = new Handler(Looper.getMainLooper());
+    private void initialize(TaskExecution<R, E> task, Executor executor) {
+        this.mTaskExecution = task;
+        this.mOnResultListeners = new ArrayDeque<>(1);
+        this.mOnErrorListeners = new ArrayDeque<>(1);
+        this.mHandler = new Handler(Looper.getMainLooper());
+        this.mExecutor = executor;
+        this.mState = INIT;
     }
 
     @NonNull
-    public BaseTask<R, E> addOnResultListener(OnResultListener<R> onResult) {
-        if (onResult != null)
-            this.onResultListeners.add(onResult);
+    public Task<R, E> addOnResultListener(OnResultListener<R> onResultListener) {
+        if (onResultListener != null)
+            this.mOnResultListeners.add(onResultListener);
 
         return this;
     }
 
     @NonNull
-    public BaseTask<R, E> addOnErrorListener(OnErrorListener<E> onFail) {
-        if (onFail != null)
-            this.onErrorListeners.add(onFail);
+    public Task<R, E> addOnErrorListener(OnErrorListener<E> onErrorListener) {
+        if (onErrorListener != null)
+            this.mOnErrorListeners.add(onErrorListener);
+
+        return this;
+    }
+
+    @Override
+    public Task<R, E> setTimeout(@NonNull TimeoutCallback timeoutCallback) {
+        if (mTimeoutTimer != null) {
+            mTimeoutTimer.cancel();
+        }
+
+        mTimeoutTimer = new Timer();
+        mTimeoutTimer.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                setState(TIMEOUT);
+                onFinish();
+            }
+        }, timeoutCallback.getTimeoutInMillis());
+
+        mTimeoutCallback = timeoutCallback;
 
         return this;
     }
 
     protected void cancel(E error) {
-        this.error = error;
-        cancel();
-    }
-
-    private void cancel() {
+        this.mError = error;
         setState(CANCELLED);
     }
 
-    @NonNull
-    public ObservableTask<R, E> execute() {
-        checkState();
-
+    public void execute() {
         onPreExecute();
 
-        executor.execute(new Runnable() {
+        mExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                onExecution(new ExecutionCallback());
+                mTaskExecution.executeOnTask(THE_CALLBACK);
             }
         });
-
-        return this;
-    }
-
-    protected void checkState() {
-        if (isRunning())
-            throw new IllegalStateException("Task is already running!");
-
-        if (isComplete())
-            throw new IllegalStateException("Task has already finished!");
-
     }
 
     @CallSuper
     /* Call super after overriding */
     protected void onPreExecute() {
         if (isCancelled()) {
-            onFinish(true);
+            onFinish();
             return;
         }
 
         setState(RUNNING);
     }
 
-    protected abstract void onExecution(@NonNull ExecutionCallback callback);
-
     @CallSuper
     /* Call super before overriding */
-    protected void onFinish(boolean withError) {
-        if (isComplete())
-            return; // Task has already finished, ignore future results
-
-        if (!isCancelled()) {
-            setState(FINISHED);
+    protected synchronized void onFinish() {
+        if (isDone()) {
+            return; // Task has already finished, ignore future results or errors
         }
 
-        if (withError) {
-            handler.post(new Runnable() {
+        Runnable afterExecution;
+
+        if (isCancelled()) { // Task is cancelled
+            afterExecution = new Runnable() {
                 @Override
                 public void run() {
-                    while (!onErrorListeners.isEmpty()) {
-                        onErrorListeners.poll().onError(error);
+                    while (!mOnErrorListeners.isEmpty()) {
+                        mOnErrorListeners.poll().onError(mError);
                     }
-
-                    onResultListeners = null;
-                    onErrorListeners = null;
                 }
-            });
-        } else {
-            handler.post(new Runnable() {
+            };
+        } else if (isTimeout()) { // Task is timeout
+            afterExecution = new Runnable() {
                 @Override
                 public void run() {
-                    while (!onResultListeners.isEmpty()) {
-                        onResultListeners.poll().onResult(result);
-                    }
-
-                    onResultListeners = null;
-                    onErrorListeners = null;
+                    if (mTimeoutCallback != null) // TimeoutCallback should not be null in any case
+                        mTimeoutCallback.onTimeout();
                 }
-            });
+            };
+        } else { // Task is successful
+
+            afterExecution = new Runnable() {
+                @Override
+                public void run() {
+                    while (!mOnResultListeners.isEmpty()) {
+                        mOnResultListeners.poll().onResult(mResult);
+                    }
+                }
+            };
         }
 
-        result = null;
-        error = null;
-        executor = null;
-        handler = null;
+        setState(DONE);
 
-        if (executorService != null) {
-            executorService.shutdown();
-            executorService = null;
+        mHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                afterExecution.run();
+
+                nullObjects();
+            }
+        });
+    }
+
+    private void nullObjects() {
+        mResult = null;
+        mError = null;
+        mOnResultListeners = null;
+        mOnErrorListeners = null;
+        mExecutor = null;
+        mHandler = null;
+        mTaskExecution = null;
+        mTimeoutCallback = null;
+
+        if (mExecutorService != null) {
+            mExecutorService.shutdown();
+            mExecutorService = null;
         }
     }
 
-    public boolean isRunning() {
-        return state.get() == RUNNING;
+    protected boolean isSuccessful() {
+        synchronized (stateLock) {
+            return mState == SUCCESS;
+        }
     }
 
-    public boolean isCancelled() {
-        return state.get() == CANCELLED;
+    protected boolean isCancelled() {
+        synchronized (stateLock) {
+            return mState == CANCELLED;
+        }
     }
 
-    public boolean isComplete() {
-        return state.get() == CANCELLED || state.get() == FINISHED;
+    protected boolean isTimeout() {
+        synchronized (stateLock) {
+            return mState == TIMEOUT;
+        }
+    }
+
+    protected boolean isComplete() {
+        synchronized (stateLock) {
+            return mState > RUNNING;
+        }
+    }
+
+    protected boolean isDone() {
+        synchronized (stateLock) {
+            return mState == DONE;
+        }
     }
 
     protected void setState(int state) {
-        this.state.set(state);
+        synchronized (stateLock) {
+            if (mState < state) {
+                mState = state;
+            }
+        }
     }
 }
