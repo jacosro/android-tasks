@@ -1,9 +1,11 @@
 package com.jacosro.tasks;
 
+import android.os.SystemClock;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.widget.Toast;
 
 import java.util.concurrent.TimeUnit;
 
@@ -23,25 +25,25 @@ public class MainActivity extends AppCompatActivity {
     public void onStart() {
         super.onStart();
 
-        Task<Integer, String> task = Tasks.createNewTask(finishTask -> {
-
-        });
-
-        makeSumTask()
+          makeSumTask()
             .addOnResultListener(result -> log("Task result: " + String.valueOf(result)))
             .addOnErrorListener(ignore -> log("Cancelled task"))
-            .setTimeout(new TimeoutCallback(TimeUnit.MILLISECONDS, 500) {
+            .setTimeout(new TimeoutCallback(TimeUnit.MILLISECONDS, 2000) {
                 @Override
                 public void onTimeout() {
                     log("Timeout!!!");
                 }
             });
 
-        makeSumTask();
+        makeSumTask().addOnResultListener(result -> toast(String.valueOf(result)));
     }
 
     private void log(String message) {
         Log.d(TAG, message);
+    }
+
+    private void toast(String message) {
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
     }
 
     private long makeSum() {
@@ -59,6 +61,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Task<Long, String> makeSumTask() {
-        return Tasks.createNewTask(callback -> callback.withError("I don't want to make the sum now"));
+        return TaskFactory.newTask(callback -> callback.withResult(makeSum()));
+    }
+
+    private void leak() {
+        new Thread(() -> {
+            while(true) {
+                SystemClock.sleep(1000);
+            }
+        }).start();
     }
 }

@@ -16,33 +16,6 @@ import java.util.concurrent.ExecutorService;
  * This class represents a base task.
  * In order to create a new Task class, it should extend this one
  *
- *
- * Example:
- *
- *      Task<Integer, String> task = Tasks.createNewTask(new TaskExecution<Integer, String>() {
- *          @Override
- *          public void executeOnTask(@NonNull TaskFinisher<Integer, String> finishTask) {
- *              boolean success = // whatever
- *
- *              if (success) {
- *                  finishTask.withResult(2 + 2);
- *              } else {
- *                  finishTask.withError("Error executing task");
- *              }
- *          }
- *      }.addOnResultListener(new OnResultListener<Integer>() {
- *          @Override
- *          public void onResult(Integer t) {
- *              Log.d(TAG, "Result of task: " + t);
- *          }
- *      }.addOnErrorListener(new OnErrorListener<String>() {
- *          @Override
- *          public void onError(String t) {
- *              Log.e(TAG, "Error executing task: " + t);
- *          }
- *      };
- *
- *
  * @param <R> The mResult of the task
  * @param <E> The mError in case the task is cancelled
  */
@@ -161,7 +134,7 @@ public class BaseTask<R, E> implements Task<R, E> {
         mExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                mTaskExecution.executeOnTask(THE_CALLBACK);
+                mTaskExecution.onExecution(THE_CALLBACK);
             }
         });
     }

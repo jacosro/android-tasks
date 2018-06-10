@@ -5,9 +5,9 @@ import java.util.concurrent.Executor;
 import static com.jacosro.tasks.TaskExecutors.MAIN_THREAD_EXECUTOR;
 
 /**
- *  A class for Task helper methods
+ * Class that contains methods to create Tasks
  */
-public class Tasks {
+public class TaskFactory {
 
     /**
      * Creates a simple task that returns the given result
@@ -17,7 +17,7 @@ public class Tasks {
      * @return The task
      */
     public static <R, E> Task<R, E> forResult(final R result) {
-        return createNewTask(callback -> callback.withResult(result), MAIN_THREAD_EXECUTOR);
+        return newTask(callback -> callback.withResult(result), MAIN_THREAD_EXECUTOR);
     }
 
     /**
@@ -28,7 +28,7 @@ public class Tasks {
      * @return The task
      */
     public static <R, E> Task<R, E> forError(final E error) {
-        return createNewTask(callback -> callback.withError(error), MAIN_THREAD_EXECUTOR);
+        return newTask(callback -> callback.withError(error), MAIN_THREAD_EXECUTOR);
     }
 
     /**
@@ -38,7 +38,7 @@ public class Tasks {
      * @param <E> The error type
      * @return A Task that will execute the code
      */
-    public static <R, E> Task<R, E> createNewTask(TaskExecution<R, E> taskExecution) {
+    public static <R, E> Task<R, E> newTask(TaskExecution<R, E> taskExecution) {
         return new BaseTask<>(taskExecution);
     }
 
@@ -50,7 +50,7 @@ public class Tasks {
      * @param <E> The error type
      * @return A Task that will execute the code
      */
-    public static <R, E> Task<R, E> createNewTask(TaskExecution<R, E> taskExecution, Executor executor) {
+    public static <R, E> Task<R, E> newTask(TaskExecution<R, E> taskExecution, Executor executor) {
         return new BaseTask<>(taskExecution, executor);
     }
 }

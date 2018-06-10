@@ -14,7 +14,7 @@ import android.support.annotation.NonNull;
  */
 @FunctionalInterface
 public interface TaskExecution<R, E> {
-    void executeOnTask(@NonNull TaskFinisher<R, E> finishTask);
+    void onExecution(@NonNull TaskFinisher<R, E> finish);
 
     /**
      * The callback for the execution. To finish a task, this callback must be called with an error
