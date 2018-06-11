@@ -3,7 +3,7 @@ package com.jacosro.tasks;
 import android.support.annotation.NonNull;
 
 @FunctionalInterface
-interface TaskExecution<R, E> {
+public interface TaskExecution<R, E> {
     void onExecution(TaskFinisher<R, E> taskFinisher);
 
     /**
