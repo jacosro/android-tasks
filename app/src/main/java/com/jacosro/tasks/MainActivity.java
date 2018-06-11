@@ -1,12 +1,13 @@
 package com.jacosro.tasks;
 
 import android.os.SystemClock;
-import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Toast;
 
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 
 
@@ -25,17 +26,28 @@ public class MainActivity extends AppCompatActivity {
     public void onStart() {
         super.onStart();
 
-          makeSumTask()
-            .addOnResultListener(result -> log("Task result: " + String.valueOf(result)))
-            .addOnErrorListener(ignore -> log("Cancelled task"))
-            .setTimeout(new TimeoutCallback(TimeUnit.MILLISECONDS, 2000) {
-                @Override
-                public void onTimeout() {
-                    log("Timeout!!!");
-                }
-            });
+        final Task<Long, String> task = makeSumTask();
 
-        makeSumTask().addOnResultListener(result -> toast(String.valueOf(result)));
+        long t0 = System.nanoTime();
+//        task.cancel();
+
+        task.setTimeout(new TimeoutCallback(TimeUnit.MILLISECONDS, 500) {
+            @Override
+            public void onTimeout() {
+                log("Timeout!");
+            }
+        });
+
+        task.addOnResultListener(result -> {
+            log("I got the result: " + result);
+            log(String.format("Task spent %s ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0)));
+        }).addOnErrorListener(error -> {
+            log("Task got an error: " + error);
+            log(String.format("Task spent %s ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0)));
+        });
+
+        log("Task launched!");
+
     }
 
     private void log(String message) {
@@ -48,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
 
     private long makeSum() {
         long sum = 0;
-        for (long i = 0; i < Math.sqrt(Long.MAX_VALUE); i++) {
+        for (long i = 0; i < Math.sqrt(Math.sqrt(Long.MAX_VALUE)); i++) {
             sum += i;
         }
 /*        try {
@@ -61,13 +73,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Task<Long, String> makeSumTask() {
-        return TaskFactory.newTask(callback -> callback.withResult(makeSum()));
+        return TaskFactory.newTask(taskFinisher -> taskFinisher.withResult(makeSum()));
     }
 
     private void leak() {
-        new Thread(() -> {
-            while(true) {
-                SystemClock.sleep(1000);
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                while(true) {
+                    SystemClock.sleep(1000);
+                }
             }
         }).start();
     }
