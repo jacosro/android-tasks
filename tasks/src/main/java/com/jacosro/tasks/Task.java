@@ -4,42 +4,69 @@ import android.os.Handler;
 import android.os.Looper;
 import android.support.annotation.CallSuper;
 import android.support.annotation.NonNull;
+import android.util.Log;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * This class represents a base task.
- * In order to create a new ITask class, it should extend this one
+ * In order to create a new Task class, it should extend this one
  *
+ *
+ * Example:
+ *
+ *      Task<Integer, String> task = TaskFactory.newTask(new TaskExecution<Integer, String>() {
+ *          @Override
+ *          public void onExecution(@NonNull TaskFinisher<Integer, String> taskFinisher) {
+ *              boolean success = // whatever
+ *
+ *              if (success) {
+ *                  taskFinisher.withResult(2 + 2);
+ *              } else {
+ *                  taskFinisher.withError("Error executing task");
+ *              }
+ *          }
+ *      }.addOnResultListener(new OnResultListener<Integer>() {
+ *          @Override
+ *          public void onResult(Integer t) {
+ *              Log.d(TAG, "Result of task: " + t);
+ *          }
+ *      }.addOnErrorListener(new OnErrorListener<String>() {
+ *          @Override
+ *          public void onError(String t) {
+ *              Log.e(TAG, "Error executing task: " + t);
+ *          }
+ *      };
  * @param <R> The mResult of the task
  * @param <E> The mError in case the task is cancelled
  */
-public class Task<R, E> { //} implements ITask<R, E> {
-
+public abstract class Task<R, E> {
     protected static final int INIT = 0;
     protected static final int RUNNING = 1;
-    protected static final int SUCCESS = 2;
-    protected static final int TIMEOUT = 3;
-    protected static final int CANCELLED = 4;
-    protected static final int DONE = 10;
+    protected static final int TIMEOUT = 2;
+    protected static final int SUCCESS = 3;
+    protected static final int ERROR = 4;
+    protected static final int CANCELLED = 5;
 
     // Task data
-    private R mResult;
-    private E mError;
+    private WeakReference<R> mResult;
+    private WeakReference<E> mError;
     private Queue<OnResultListener<R>> mOnResultListeners;
     private Queue<OnErrorListener<E>> mOnErrorListeners;
 
     // Task state
     private int mState;
     private final Object stateLock = new Object();
+    private AtomicBoolean done;
 
     // Handlers
-    private TaskExecution<R, E> mTaskExecution;
     private Executor mExecutor;
     private ExecutorService mExecutorService;
     private Handler mHandler;
@@ -51,63 +78,80 @@ public class Task<R, E> { //} implements ITask<R, E> {
     private final TaskExecution.TaskFinisher<R, E> THE_CALLBACK = new TaskExecution.TaskFinisher<R, E>() {
         @Override
         public void withResult(R result) {
-            Task.this.mResult = result;
+            Task.this.mResult = new WeakReference<>(result);
             setState(SUCCESS);
             onFinish();
         }
 
         @Override
         public void withError(E error) {
-            Task.this.mError = error;
-            setState(CANCELLED);
+            Task.this.mError = new WeakReference<>(error);
+            setState(ERROR);
             onFinish();
         }
     };
 
-    private Task() {
+    protected Task(@NonNull Executor executor) {
+        initialize(executor);
 
+        from();
     }
 
-    protected Task(@NonNull TaskExecution<R, E> task, @NonNull Executor executor) {
-        initialize(task, executor);
-
-        execute();
-    }
-
-    protected Task(@NonNull TaskExecution<R, E> task) {
-        initialize(task, TaskExecutors.defaultBackgroundExecutor());
+    protected Task() {
+        initialize(TaskExecutors.defaultBackgroundExecutor());
         this.mExecutorService = (ExecutorService) this.mExecutor;
 
-        execute();
+        from();
     }
 
-    private void initialize(TaskExecution<R, E> task, Executor executor) {
-        this.mTaskExecution = task;
+    private void initialize(Executor executor) {
+        this.mResult = new WeakReference<>(null);
+        this.mError = new WeakReference<>(null);
         this.mOnResultListeners = new ArrayDeque<>(1);
         this.mOnErrorListeners = new ArrayDeque<>(1);
         this.mHandler = new Handler(Looper.getMainLooper());
         this.mExecutor = executor;
         this.mState = INIT;
+        this.done = new AtomicBoolean(false);
     }
 
     @NonNull
     public Task<R, E> addOnResultListener(OnResultListener<R> onResultListener) {
-        if (onResultListener != null)
+        if (onResultListener != null) {
+            if (isDone()) {
+                R result = mResult.get();
+                if (result != null) {
+                    onResultListener.onResult(result);
+                }
+
+                return this;
+            }
+
             this.mOnResultListeners.add(onResultListener);
+        }
 
         return this;
     }
 
     @NonNull
     public Task<R, E> addOnErrorListener(OnErrorListener<E> onErrorListener) {
-        if (onErrorListener != null)
+        if (onErrorListener != null) {
+            if (isDone()) {
+                E error = mError.get();
+                if (error != null) {
+                    onErrorListener.onError(error);
+                }
+
+                return this;
+            }
+
             this.mOnErrorListeners.add(onErrorListener);
+        }
 
         return this;
     }
 
-    // @Override
-    public Task<R, E> setTimeout(@NonNull TimeoutCallback timeoutCallback) {
+    public void setTimeout(@NonNull TimeoutCallback timeoutCallback) {
         if (mTimeoutTimer != null) {
             mTimeoutTimer.cancel();
         }
@@ -122,30 +166,29 @@ public class Task<R, E> { //} implements ITask<R, E> {
         }, timeoutCallback.getTimeoutInMillis());
 
         mTimeoutCallback = timeoutCallback;
-
-        return this;
     }
 
-    protected void cancel(E error) {
-        this.mError = error;
+    public void cancel() {
         setState(CANCELLED);
     }
 
-    private void execute() {
+    private void from() {
         onPreExecute();
 
         mExecutor.execute(new Runnable() {
             @Override
             public void run() {
-                mTaskExecution.onExecution(THE_CALLBACK);
+                onExecution(THE_CALLBACK);
             }
         });
     }
 
+    protected abstract void onExecution(TaskExecution.TaskFinisher<R, E> taskFinisher);
+
     @CallSuper
     /* Call super after overriding */
     protected void onPreExecute() {
-        if (isCancelled()) {
+        if (isFailed()) {
             onFinish();
             return;
         }
@@ -157,21 +200,32 @@ public class Task<R, E> { //} implements ITask<R, E> {
     /* Call super before overriding */
     protected synchronized void onFinish() {
         if (isDone()) {
-            return; // ITask has already finished, ignore future results or errors
+            return; // Task has already finished, ignore future results or errors
         }
 
         Runnable afterExecution;
 
-        if (isCancelled()) { // ITask is cancelled
+        if (isCancelled()) {
             afterExecution = new Runnable() {
                 @Override
                 public void run() {
-                    while (!mOnErrorListeners.isEmpty()) {
-                        mOnErrorListeners.poll().onError(mError);
-                    }
+                    // Nothing to do. Null objects and that's it
                 }
             };
-        } else if (isTimeout()) { // ITask is timeout
+        } else if (isFailed()) { // Task is cancelled
+            afterExecution = new Runnable() {
+                @Override
+                public void run() {
+                    E error = mError.get();
+
+                    if (error == null)
+                        return;
+
+                    while (!mOnErrorListeners.isEmpty())
+                        mOnErrorListeners.poll().onError(error);
+                }
+            };
+        } else if (isTimeout()) { // Task is timeout
             afterExecution = new Runnable() {
                 @Override
                 public void run() {
@@ -179,19 +233,22 @@ public class Task<R, E> { //} implements ITask<R, E> {
                         mTimeoutCallback.onTimeout();
                 }
             };
-        } else { // ITask is successful
-
+        } else { // Task is successful
             afterExecution = new Runnable() {
                 @Override
                 public void run() {
-                    while (!mOnResultListeners.isEmpty()) {
-                        mOnResultListeners.poll().onResult(mResult);
-                    }
+                    R result = mResult.get();
+
+                    if (result == null)
+                        return;
+
+                    while (!mOnResultListeners.isEmpty())
+                        mOnResultListeners.poll().onResult(result);
                 }
             };
         }
 
-        setState(DONE);
+        done.set(true);
 
         mHandler.post(new Runnable() {
             @Override
@@ -204,13 +261,10 @@ public class Task<R, E> { //} implements ITask<R, E> {
     }
 
     private void nullObjects() {
-        mResult = null;
-        mError = null;
         mOnResultListeners = null;
         mOnErrorListeners = null;
         mExecutor = null;
         mHandler = null;
-        mTaskExecution = null;
         mTimeoutCallback = null;
 
         if (mExecutorService != null) {
@@ -225,9 +279,9 @@ public class Task<R, E> { //} implements ITask<R, E> {
         }
     }
 
-    protected boolean isCancelled() {
+    protected boolean isFailed() {
         synchronized (stateLock) {
-            return mState == CANCELLED;
+            return mState == ERROR;
         }
     }
 
@@ -237,16 +291,14 @@ public class Task<R, E> { //} implements ITask<R, E> {
         }
     }
 
-    protected boolean isComplete() {
+    public boolean isCancelled() {
         synchronized (stateLock) {
-            return mState > RUNNING;
+            return mState == CANCELLED;
         }
     }
 
     protected boolean isDone() {
-        synchronized (stateLock) {
-            return mState == DONE;
-        }
+        return done.get();
     }
 
     protected void setState(int state) {
@@ -255,28 +307,5 @@ public class Task<R, E> { //} implements ITask<R, E> {
                 mState = state;
             }
         }
-    }
-
-    /**
-     * Creates a new task that will execute the code inside TaskExecution
-     * @param taskExecution The code that will be executed
-     * @param <R> The result type
-     * @param <E> The error type
-     * @return A ITask that will execute the code
-     */
-    public static <R, E> Task<R, E> newTask(TaskExecution<R, E> taskExecution) {
-        return new Task<>(taskExecution);
-    }
-
-    /**
-     * Creates a new task that will execute the code inside TaskExecution
-     * @param taskExecution The code that will be executed
-     * @param executor The executor who will execute the code
-     * @param <R> The result type
-     * @param <E> The error type
-     * @return A ITask that will execute the code
-     */
-    public static <R, E> Task<R, E> newTask(TaskExecution<R, E> taskExecution, Executor executor) {
-        return new Task<>(taskExecution, executor);
     }
 }
