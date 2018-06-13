@@ -1,13 +1,13 @@
 package com.jacosro.tasks;
 
 import android.os.SystemClock;
+import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.widget.Toast;
 
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
 
 
@@ -31,23 +31,26 @@ public class MainActivity extends AppCompatActivity {
         long t0 = System.nanoTime();
 //        task.cancel();
 
-        task.setTimeout(new TimeoutCallback(TimeUnit.MILLISECONDS, 500) {
-            @Override
-            public void onTimeout() {
-                log("Timeout!");
-            }
-        });
-
         task.addOnResultListener(result -> {
             log("I got the result: " + result);
             log(String.format("Task spent %s ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0)));
         }).addOnErrorListener(error -> {
             log("Task got an error: " + error);
             log(String.format("Task spent %s ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0)));
-        });
+        }).setTimeout(100, () -> log("Timeout!!"));
 
         log("Task launched!");
 
+        Task<Void, Void> motherOfTasks = Tasks.whenAll(
+                task,
+                Tasks.runOnBackgroundThread(taskFinisher -> taskFinisher.withResult(makeSum())),
+                Tasks.runOnBackgroundThread(taskFinisher -> taskFinisher.withError("Error")),
+                makeSumTask()
+        );
+
+        motherOfTasks
+                .addOnResultListener(result -> log("Mother of tasks succeeded"))
+                .addOnErrorListener(error -> log("Mother of tasks error: " + error));
     }
 
     private void log(String message) {
@@ -73,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Task<Long, String> makeSumTask() {
-        return TaskFactory.newTask(taskFinisher -> taskFinisher.withResult(makeSum()));
+        return Tasks.runOnBackgroundThread(taskFinisher -> taskFinisher.withResult(makeSum()));
     }
 
     private void leak() {
