@@ -10,5 +10,5 @@ import static java.lang.annotation.RetentionPolicy.CLASS;
 @Inherited
 @Retention(CLASS)
 @Target({ElementType.METHOD})
-public @interface CallTaskFinisher {
+public @interface CallWorkFinisher {
 }

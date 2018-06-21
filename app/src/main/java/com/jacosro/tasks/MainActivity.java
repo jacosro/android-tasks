@@ -48,9 +48,16 @@ public class MainActivity extends AppCompatActivity {
                 makeSumTask()
         );
 
+        log(task.toString());
+
         motherOfTasks
                 .addOnResultListener(result -> log("Mother of tasks succeeded"))
                 .addOnErrorListener(error -> log("Mother of tasks error: " + error));
+
+        Tasks.runOnBackgroundThread(workFinisher -> {
+            Log.d(TAG, "Im on a task that will not call workFinisher");
+        }).addOnResultListener(result -> Log.d(TAG, "Task finished"))
+                .addOnErrorListener(error -> Log.d(TAG, "Error"));
     }
 
     private void log(String message) {

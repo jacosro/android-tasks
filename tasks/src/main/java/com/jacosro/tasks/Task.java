@@ -18,17 +18,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Usage example:
  *
  * <pre>{@code
- *      Tasks.runOnBackgroundThread(taskFinisher -> {
+ *      Tasks.runOnBackgroundThread(workFinisher -> {
  *          boolean success = // whatever
  *
  *          if (success) {
- *              taskFinisher.withResult(2 + 2);
+ *              workFinisher.withResult(2 + 2);
  *          } else {
- *              taskFinisher.withError("Error executing task");
+ *              workFinisher.withError("Error executing task");
  *          }
- *      }).addOnResultListener(result -> Log.d("Task", "Result: " + result))
+ *      })
+ *      .addOnResultListener(result -> Log.d("Task", "Result: " + result))
  *      .addOnErrorListener(error -> Log.d("Task", "Error: " + error)
- *      .setTimeout(1000, () -> Log.d("Task", "Task is timeout"));
+ *      .setTimeout(1000, () -> Log.d("Task", "Timeout!"));
  * }</pre>
  *
  * @param <R> The result type of the task
@@ -143,7 +144,7 @@ public abstract class Task<R, E> {
         mTimeoutCallback = callback;
 
         mTimeoutTask = Tasks.runOnBackgroundThread(new TaskWork<Void, Void>() {
-            @CallTaskFinisher
+            @CallWorkFinisher
             @Override
             public void doWork(@NonNull WorkFinisher<Void, Void> workFinisher) {
                 try {
@@ -168,8 +169,15 @@ public abstract class Task<R, E> {
             @Override
             public void run() {
                 onExecution(FINISHER);
+
+                checkWorkFinisherCalled();
             }
         });
+    }
+
+    private void checkWorkFinisherCalled() {
+        if (!isFinished())
+            throw new IllegalStateException("WorkFinisher must be called on task work");
     }
 
     protected abstract void onExecution(TaskWork.WorkFinisher<R, E> workFinisher);
@@ -340,5 +348,15 @@ public abstract class Task<R, E> {
                 mState = state;
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        return String.format("Task: %s", (
+                mState == RUNNING ? "RUNNING" :
+                        (mState == TIMEOUT ? "TIMEOUT" :
+                                (mState == SUCCESS ? "SUCCESS" :
+                                        (mState == ERROR ? "ERROR" : "CANCELLED"))))
+        );
     }
 }

@@ -1,13 +1,13 @@
 package com.jacosro.tasks;
 
 import android.support.annotation.NonNull;
-import android.util.Log;
 
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Stack;
 import java.util.concurrent.Executor;
 
+import static com.jacosro.tasks.TaskExecutors.CURRENT_THREAD_EXECUTOR;
 import static com.jacosro.tasks.TaskExecutors.MAIN_THREAD_EXECUTOR;
 
 public class Tasks {
@@ -56,6 +56,19 @@ public class Tasks {
     }
 
     /**
+     * Creates a task that executes the code from TaskWork in the current thread
+     *
+     * @param taskWork The code that will be executed
+     * @param <R> The Result type
+     * @param <E> The Error type
+     * @return A task that will execute the code from TaskWork in the current thread
+     */
+    @NonNull
+    public static <R, E> Task<R, E> runOnCurrentThread(@NonNull TaskWork<R, E> taskWork) {
+        return runOnExecutor(CURRENT_THREAD_EXECUTOR, taskWork);
+    }
+
+    /**
      * Creates a task that executes the code from TaskWork in main thread
      * @param taskWork The code that will be executed
      * @param <R> The Result type
@@ -64,12 +77,7 @@ public class Tasks {
      */
     @NonNull
     public static <R, E> Task<R, E> runOnMainThread(@NonNull TaskWork<R, E> taskWork) {
-        return new Task<R, E>(MAIN_THREAD_EXECUTOR) {
-            @Override
-            protected void onExecution(TaskWork.WorkFinisher<R, E> workFinisher) {
-                taskWork.doWork(workFinisher);
-            }
-        };
+        return runOnExecutor(MAIN_THREAD_EXECUTOR, taskWork);
     }
 
     /**
@@ -113,7 +121,7 @@ public class Tasks {
     @SuppressWarnings("unchecked")
     public static Task<Void, Void> whenAll(Collection<? extends Task> tasks) {
         return runOnBackgroundThread(new TaskWork<Void, Void>() {
-            @CallTaskFinisher
+            @CallWorkFinisher
             @Override
             public void doWork(@NonNull WorkFinisher<Void, Void> workFinisher) {
                 Stack resultsStack = new Stack();

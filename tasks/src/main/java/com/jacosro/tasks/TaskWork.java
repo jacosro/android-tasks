@@ -5,7 +5,7 @@ import android.support.annotation.NonNull;
 @FunctionalInterface
 public interface TaskWork<R, E> {
 
-    @CallTaskFinisher
+    @CallWorkFinisher
     void doWork(@NonNull WorkFinisher<R, E> workFinisher);
 
     /**
