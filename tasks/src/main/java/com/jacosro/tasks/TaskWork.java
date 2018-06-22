@@ -6,7 +6,7 @@ import android.support.annotation.NonNull;
 public interface TaskWork<R, E> {
 
     @CallWorkFinisher
-    void doWork(@NonNull WorkFinisher<R, E> workFinisher);
+    void onWork(@NonNull WorkFinisher<R, E> workFinisher);
 
     /**
      * The callback for the execution. To finish a task, this callback must be called with an error

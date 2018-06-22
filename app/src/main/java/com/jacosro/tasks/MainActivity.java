@@ -8,6 +8,7 @@ import android.util.Log;
 import android.widget.Toast;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 
@@ -37,27 +38,39 @@ public class MainActivity extends AppCompatActivity {
         }).addOnErrorListener(error -> {
             log("Task got an error: " + error);
             log(String.format("Task spent %s ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0)));
-        }).setTimeout(100, () -> log("Timeout!!"));
+        }).setTimeout(1000, () -> log("Timeout!!"));
 
         log("Task launched!");
 
-        Task<Void, Void> motherOfTasks = Tasks.whenAll(
+        Task<List<Long>, Void> motherOfTasks = Tasks.whenAllSuccess(
                 task,
-                Tasks.runOnBackgroundThread(taskFinisher -> taskFinisher.withResult(makeSum())),
-                Tasks.runOnBackgroundThread(taskFinisher -> taskFinisher.withError("Error")),
+                Tasks.runAsync(taskFinisher -> taskFinisher.withResult(makeSum())),
+                //Tasks.runAsync(taskFinisher -> taskFinisher.withError("Error")),
                 makeSumTask()
         );
 
         log(task.toString());
 
         motherOfTasks
-                .addOnResultListener(result -> log("Mother of tasks succeeded"))
+                .addOnResultListener(result -> log("Mother of tasks succeeded: " + result.toString()))
                 .addOnErrorListener(error -> log("Mother of tasks error: " + error));
 
-        Tasks.runOnBackgroundThread(workFinisher -> {
+        /*Tasks.runAsync(workFinisher -> {
             Log.d(TAG, "Im on a task that will not call workFinisher");
         }).addOnResultListener(result -> Log.d(TAG, "Task finished"))
-                .addOnErrorListener(error -> Log.d(TAG, "Error"));
+                .addOnErrorListener(error -> Log.d(TAG, "Error"));*/
+
+
+        // Test run sync
+        Task<Long, String> syncTask = Tasks.run(new TaskWork<Long, String>() {
+            @Override
+            public void onWork(@NonNull WorkFinisher<Long, String> workFinisher) {
+                workFinisher.withResult(makeSum());
+            }
+        });
+        log("SyncTask: " + syncTask.getResult());
+
+
     }
 
     private void log(String message) {
@@ -83,7 +96,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private Task<Long, String> makeSumTask() {
-        return Tasks.runOnBackgroundThread(taskFinisher -> taskFinisher.withResult(makeSum()));
+        return Tasks.runAsync(taskFinisher -> taskFinisher.withResult(makeSum()));
     }
 
     private void leak() {

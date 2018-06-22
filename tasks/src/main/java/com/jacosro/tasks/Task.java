@@ -59,8 +59,6 @@ public abstract class Task<R, E> {
     private Handler mHandler;
 
     // Timeout
-//    private Timer mTimeoutTimer;
-//    private OldTimeoutCallback mTimeoutCallback;
     private Task<Void, Void> mTimeoutTask;
     private TimeoutCallback mTimeoutCallback;
 
@@ -128,7 +126,7 @@ public abstract class Task<R, E> {
 
     /**
      * Sets a timeout for the task in which if the task does not finish whithin the time specified
-     * it is cancelled and the OldTimeoutCallback is called
+     * it is cancelled and the TimeoutCallback is called
      *
      * @param milliseconds The timeout time in milliseconds
      * @param callback The code to execute after timeout
@@ -143,10 +141,10 @@ public abstract class Task<R, E> {
 
         mTimeoutCallback = callback;
 
-        mTimeoutTask = Tasks.runOnBackgroundThread(new TaskWork<Void, Void>() {
+        mTimeoutTask = Tasks.runAsync(new TaskWork<Void, Void>() {
             @CallWorkFinisher
             @Override
-            public void doWork(@NonNull WorkFinisher<Void, Void> workFinisher) {
+            public void onWork(@NonNull WorkFinisher<Void, Void> workFinisher) {
                 try {
                     Thread.sleep(milliseconds);
                 } catch (InterruptedException ignored) {
@@ -170,7 +168,13 @@ public abstract class Task<R, E> {
             public void run() {
                 onExecution(FINISHER);
 
-                checkWorkFinisherCalled();
+                /* Cannot perform this check because
+                 if there is another async task inside execution,
+                 the execution of this task will finish before others,
+                 causing an early thrown of the exception
+                 */
+
+                // checkWorkFinisherCalled();
             }
         });
     }
@@ -208,10 +212,8 @@ public abstract class Task<R, E> {
             afterExecution = new Runnable() {
                 @Override
                 public void run() {
-                    if (mTimeoutCallback != null)
+                    if (mTimeoutCallback != null) // Should not be null in any case at this point
                         mTimeoutCallback.onTimeout();
-                    /*if (mTimeoutCallback != null) // OldTimeoutCallback should not be null in any case
-                        mTimeoutCallback.onTimeout();*/
                 }
             };
         } else { // Task is successful
@@ -262,10 +264,7 @@ public abstract class Task<R, E> {
 
         // Timeout
         mTimeoutCallback = null;
-
-        if (mTimeoutTask != null) {
-            mTimeoutTask = null;
-        }
+        mTimeoutTask = null;
     }
 
     /**
