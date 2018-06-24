@@ -8,10 +8,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Stack;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.jacosro.tasks.TaskExecutors.CURRENT_THREAD_EXECUTOR;
 import static com.jacosro.tasks.TaskExecutors.MAIN_THREAD_EXECUTOR;
+import static com.jacosro.tasks.TaskExecutors.defaultBackgroundExecutor;
 
 public class Tasks {
 
@@ -63,12 +65,7 @@ public class Tasks {
      */
     @NonNull
     public static <R, E> Task<R, E> runAsync(@NonNull TaskWork<R, E> taskWork) {
-        return new Task<R, E>() {
-            @Override
-            protected void onExecution(TaskWork.WorkFinisher<R, E> workFinisher) {
-                taskWork.onWork(workFinisher);
-            }
-        };
+        return runOnExecutor(defaultBackgroundExecutor(), taskWork);
     }
 
     /**

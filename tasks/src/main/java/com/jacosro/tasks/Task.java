@@ -9,7 +9,6 @@ import java.util.ArrayDeque;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -58,10 +57,9 @@ public abstract class Task<R, E> {
     private final Object stateLock = new Object();
     private AtomicBoolean mFinished;
 
-    // Handlers
+    // Executors
     private Executor mExecutor;
-    private ExecutorService mExecutorService;
-    private Handler mHandler;
+    private Executor mOnCompleteExecutor;
 
     // Timeout
     private Task<Void, Void> mTimeoutTask;
@@ -80,26 +78,15 @@ public abstract class Task<R, E> {
     };
 
     protected Task(@NonNull Executor executor) {
-        initialize(executor);
-
-        execute();
-    }
-
-    protected Task() {
-        initialize(TaskExecutors.defaultBackgroundExecutor());
-        this.mExecutorService = (ExecutorService) this.mExecutor;
-
-        execute();
-    }
-
-    private void initialize(Executor executor) {
         this.mOnResultListeners = new ArrayDeque<>(1);
         this.mOnErrorListeners = new ArrayDeque<>(1);
-        this.mHandler = new Handler(Looper.getMainLooper());
         this.mExecutor = executor;
+        this.mOnCompleteExecutor = TaskExecutors.MAIN_THREAD_EXECUTOR;
         this.mState = RUNNING;
         this.mFinished = new AtomicBoolean(false);
         assignId();
+
+        execute();
     }
 
     private void assignId() {
@@ -237,18 +224,17 @@ public abstract class Task<R, E> {
             };
         }
 
-        mHandler.post(new Runnable() {
+        mOnCompleteExecutor.execute(new Runnable() {
             @Override
             public void run() {
                 afterExecution.run();
 
                 nullObjects();
+                onFinish();
             }
         });
 
         mFinished.set(true);
-
-        onFinish();
     }
 
     /**
@@ -266,12 +252,7 @@ public abstract class Task<R, E> {
 
         //Handlers
         mExecutor = null;
-        mHandler = null;
-
-        if (mExecutorService != null) {
-            mExecutorService.shutdown();
-            mExecutorService = null;
-        }
+        mOnCompleteExecutor = null;
 
         // Timeout
         mTimeoutCallback = null;
