@@ -11,6 +11,7 @@ import java.util.Queue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class represents a base task.
@@ -36,6 +37,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @param <E> The error type in case the task is cancelled
  */
 public abstract class Task<R, E> {
+
+    private static final AtomicInteger LAST_ID = new AtomicInteger(0);
+
     protected static final int RUNNING = 1;
     protected static final int TIMEOUT = 2;
     protected static final int SUCCESS = 3;
@@ -43,6 +47,7 @@ public abstract class Task<R, E> {
     protected static final int CANCELLED = 5;
 
     // Task data
+    private int id;
     private R mResult;
     private E mError;
     private Queue<OnResultListener<R>> mOnResultListeners;
@@ -94,6 +99,12 @@ public abstract class Task<R, E> {
         this.mExecutor = executor;
         this.mState = RUNNING;
         this.mFinished = new AtomicBoolean(false);
+        assignId();
+    }
+
+    private void assignId() {
+        LAST_ID.compareAndSet(Integer.MAX_VALUE, 0);
+        this.id = LAST_ID.getAndIncrement();
     }
 
     @NonNull
@@ -162,7 +173,7 @@ public abstract class Task<R, E> {
         setState(CANCELLED);
     }
 
-    private void execute() {
+    protected void execute() {
         mExecutor.execute(new Runnable() {
             @Override
             public void run() {
@@ -351,11 +362,23 @@ public abstract class Task<R, E> {
 
     @Override
     public String toString() {
-        return String.format("Task: %s", (
+        return String.format("Task number %s: %s", id, (
                 mState == RUNNING ? "RUNNING" :
                         (mState == TIMEOUT ? "TIMEOUT" :
                                 (mState == SUCCESS ? "SUCCESS" :
                                         (mState == ERROR ? "ERROR" : "CANCELLED"))))
         );
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o)
+            return true;
+
+        if (!(o instanceof Task))
+            return false;
+
+        Task task = (Task) o;
+        return task.id == this.id;
     }
 }
