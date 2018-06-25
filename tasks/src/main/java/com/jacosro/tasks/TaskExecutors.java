@@ -9,6 +9,8 @@ import java.util.concurrent.Executors;
 
 public class TaskExecutors {
 
+    private static Executor defaultBackgroundExecutor;
+
     public static final Executor CURRENT_THREAD_EXECUTOR = new Executor() {
         @Override
         public void execute(@NonNull Runnable command) {
@@ -27,6 +29,10 @@ public class TaskExecutors {
     };
 
     public static Executor defaultBackgroundExecutor() {
-        return Executors.newSingleThreadExecutor();
+        if (defaultBackgroundExecutor == null) {
+            defaultBackgroundExecutor = Executors.newCachedThreadPool();
+        }
+
+        return defaultBackgroundExecutor;
     }
 }

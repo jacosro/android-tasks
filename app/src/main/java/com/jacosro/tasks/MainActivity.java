@@ -27,33 +27,31 @@ public class MainActivity extends AppCompatActivity {
     public void onStart() {
         super.onStart();
 
+        log("Main thread: " + Thread.currentThread().getName());
+
         final Task<Long, String> task = makeSumTask();
 
         long t0 = System.nanoTime();
-//        task.cancel();
 
-        task.addOnResultListener(result -> {
-            log("I got the result: " + result);
-            log(String.format("Task spent %s ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0)));
+        task.addOnResultListener(TaskExecutors.MAIN_THREAD_EXECUTOR, result -> {
+            log(String.format("%s: Task success spent %s ms", Thread.currentThread().getName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0)));
         }).addOnErrorListener(error -> {
             log("Task got an error: " + error);
-            log(String.format("Task spent %s ms", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0)));
-        }).setTimeout(1000, () -> log("Timeout!!"));
+            log(String.format("%s: Task error spent %s ms", Thread.currentThread().getName(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0)));
+        }).setTimeout(60, () -> log(String.format("%s: Task timeout", Thread.currentThread().getName())));
 
-        log("Task launched!");
+        log("Task launched! " + task.toString());
 
         Task<List<Long>, Void> motherOfTasks = Tasks.whenAllSuccess(
                 task,
                 Tasks.runAsync(taskFinisher -> taskFinisher.withResult(makeSum())),
-                //Tasks.runAsync(taskFinisher -> taskFinisher.withError("Error")),
+//                Tasks.runAsync(taskFinisher -> taskFinisher.withError("Error")),
                 makeSumTask()
         );
 
-        log(task.toString());
-
         motherOfTasks
-                .addOnResultListener(result -> log("Mother of tasks succeeded: " + result.toString()))
-                .addOnErrorListener(error -> log("Mother of tasks error: " + error));
+                .addOnResultListener(result -> log(String.format("%s: %s", motherOfTasks.toString(), result.toString())))
+                .addOnErrorListener(error -> log(String.format("%s: %s", motherOfTasks.toString(), error)));
 
         /*Tasks.runAsync(workFinisher -> {
             Log.d(TAG, "Im on a task that will not call workFinisher");
@@ -68,9 +66,15 @@ public class MainActivity extends AppCompatActivity {
                 workFinisher.withResult(makeSum());
             }
         });
-        log("SyncTask: " + syncTask.getResult());
+        log(syncTask.toString() + ": " + syncTask.getResult());
 
+        Tasks.run(workFinisher -> log("Im on thread " + Thread.currentThread().getName()));
 
+        Tasks.schedule(3000, workFinisher -> {
+            log("Im scheduled 3 seconds later");
+
+            workFinisher.withResult(null);
+        });
     }
 
     private void log(String message) {
